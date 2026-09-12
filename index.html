@@ -171,32 +171,48 @@
   .footer { display: flex; justify-content: center; gap: 12px; font-size: .85rem; color: #7a8699; }
   .footer button { background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; }
 
-  /* Camera mode */
-  .cam-card { padding: 8px; }
-  .cam-wrap { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #1b2430; border-radius: 14px; overflow: hidden; }
+  /* Camera mode: 전체 화면 */
+  html.cam-open, html.cam-open body { overflow: hidden; }
+  #screen-cam { position: fixed; inset: 0; z-index: 10; background: #0d141c; display: none; }
+  #screen-cam.active { display: block; }
+  .cam-wrap { position: absolute; inset: 0; background: #0d141c; }
   .cam-wrap video, .cam-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
   .cam-wrap canvas { pointer-events: none; }
-  .cam-status { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: rgba(47,58,74,.78); color: #fff; font-weight: 800; font-size: .9rem; padding: 6px 12px; border-radius: 999px; white-space: nowrap; max-width: 94%; overflow: hidden; text-overflow: ellipsis; }
-  .cam-status.brushing { background: rgba(79,195,247,.9); color: #123; }
-  .cam-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff; font-weight: 800; background: #1b2430; }
-  .cam-loading img { width: 90px; height: 90px; image-rendering: pixelated; object-fit: contain; animation: float 2s ease-in-out infinite; }
+  .cam-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #fff; font-weight: 800; background: #0d141c; z-index: 3; text-align: center; padding: 0 24px; }
+  .cam-loading img { width: 110px; height: 110px; image-rendering: pixelated; object-fit: contain; animation: float 2s ease-in-out infinite; }
   .cam-loading[hidden] { display: none; }
-  .zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
-  .zone { position: relative; background: #f4f7fb; border-radius: 14px; padding: 8px 6px 10px; text-align: center; font-size: .78rem; font-weight: 800; color: #55637a; overflow: hidden; border: 3px solid transparent; transition: border-color .2s, transform .2s; }
-  .zone .germ-row { font-size: 1.1rem; line-height: 1.2; min-height: 1.3em; }
-  .zone .zbar { height: 8px; background: #e6edf5; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .cam-ui-top, .cam-ui-bottom { position: absolute; left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 8px; }
+  .cam-ui-top { top: 0; padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 14px; background: linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,0)); }
+  .cam-ui-bottom { bottom: 0; padding: 16px 12px calc(env(safe-area-inset-bottom, 0px) + 12px); background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.6)); align-items: center; }
+  .cam-ui-top .topbar { align-items: center; }
+  .cam-ui-top .fairy-mini { width: 60px; height: 54px; }
+  .cam-ui-top .bubble { background: rgba(255,255,255,.92); font-size: .9rem; padding: 7px 10px; }
+  .icon-btn { flex: none; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,.9); font-size: 1.15rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .icon-btn:active { transform: scale(.94); }
+  .hud-light { color: #fff; }
+  .hud-light .timer { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  .hud-light .timer.hurry { color: #ff8a80; }
+  .hud-light .score { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  .hud-light .bar { background: rgba(255,255,255,.35); }
+  .cam-status { background: rgba(47,58,74,.82); color: #fff; font-weight: 800; font-size: .95rem; padding: 7px 14px; border-radius: 999px; white-space: nowrap; max-width: 96%; overflow: hidden; text-overflow: ellipsis; }
+  .cam-status.brushing { background: rgba(79,195,247,.95); color: #123; }
+  .cam-swatch { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.9); border-radius: 999px; padding: 3px 10px 3px 3px; font-size: .72rem; font-weight: 800; color: #2f3a4a; align-self: flex-end; }
+  .cam-swatch i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); display: block; }
+  .cam-swatch[hidden] { display: none; }
+  .zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%; max-width: 560px; }
+  .zone { position: relative; background: rgba(255,255,255,.88); border-radius: 12px; padding: 5px 4px 7px; text-align: center; font-size: .68rem; font-weight: 800; color: #55637a; overflow: hidden; border: 3px solid transparent; transition: border-color .2s, transform .2s, background .2s; line-height: 1.2; }
+  .zone .germ-row { font-size: .95rem; line-height: 1.15; min-height: 1.2em; letter-spacing: -2px; }
+  .zone .zbar { height: 6px; background: #e6edf5; border-radius: 999px; overflow: hidden; margin-top: 4px; }
   .zone .zbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--mint), var(--blue)); border-radius: 999px; transition: width .2s; }
   .zone.target { border-color: var(--yellow); background: #fff8dc; }
-  .zone.active { transform: scale(1.04); border-color: var(--blue); }
+  .zone.active { transform: scale(1.05); border-color: var(--blue); }
   .zone.clean { background: #e3fbf3; color: #1f8f6b; }
   .zone.boss { border-color: #9c6ade; background: #efe6ff; animation: shake .5s ease-in-out infinite; }
-  .zone .boss-badge { position: absolute; top: 4px; right: 6px; font-size: 1rem; }
+  .zone .boss-badge { position: absolute; top: 2px; right: 4px; font-size: .9rem; }
   @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
   .zone.pop { animation: pop .35s ease; }
   .privacy { font-size: .8rem; color: #7a8699; text-align: center; }
-  .cam-swatch { position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.85); border-radius: 999px; padding: 4px 10px 4px 4px; font-size: .75rem; font-weight: 800; color: #2f3a4a; }
-  .cam-swatch i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); display: block; }
-  .cam-swatch[hidden] { display: none; }
+  @media (min-height: 760px) { .zone { font-size: .78rem; padding: 7px 4px 9px; } .zone .germ-row { font-size: 1.1rem; } }
 
   @media (max-width: 380px) {
     h1 { font-size: 1.35rem; }
@@ -301,31 +317,30 @@
 
   <!-- ===== 카메라 모드 화면 ===== -->
   <section id="screen-cam" class="screen">
-    <div class="topbar">
-      <img class="fairy-mini" id="cam-fairy" src="assets/deotni/smile.png" alt="덧니">
-      <div class="bubble" id="cam-bubble">카메라를 준비하고 있어요…</div>
+    <div class="cam-wrap">
+      <video id="cam-video" playsinline muted autoplay></video>
+      <canvas id="cam-overlay"></canvas>
+      <div class="cam-loading" id="cam-loading"><img src="assets/deotni/notepad.webp" alt=""><span id="cam-loading-text">카메라 켜는 중…</span></div>
     </div>
 
-    <div class="hud">
-      <div class="timer">2:00</div>
-      <div class="bar"><i class="progress-fill"></i><span class="progress-text">0%</span></div>
-      <div class="score">0점</div>
-    </div>
-
-    <div class="card cam-card">
-      <div class="cam-wrap">
-        <video id="cam-video" playsinline muted autoplay></video>
-        <canvas id="cam-overlay"></canvas>
-        <div class="cam-loading" id="cam-loading"><img src="assets/deotni/notepad.webp" alt=""><span id="cam-loading-text">카메라 켜는 중…</span></div>
-        <div class="cam-status" id="cam-status">얼굴을 찾는 중…</div>
-        <div class="cam-swatch" id="cam-swatch" hidden><i></i>내 칫솔</div>
+    <div class="cam-ui-top">
+      <div class="topbar">
+        <img class="fairy-mini" id="cam-fairy" src="assets/deotni/smile.png" alt="덧니">
+        <div class="bubble" id="cam-bubble">카메라를 준비하고 있어요…</div>
+        <button class="icon-btn" id="btn-recalib" title="칫솔 다시 저장" aria-label="칫솔 다시 저장">🎨</button>
+        <button class="icon-btn" id="btn-cam-quit" title="그만하기" aria-label="그만하기">✕</button>
       </div>
-      <div class="zones" id="zones"></div>
+      <div class="hud hud-light">
+        <div class="timer">2:00</div>
+        <div class="bar"><i class="progress-fill"></i><span class="progress-text">0%</span></div>
+        <div class="score">0점</div>
+      </div>
     </div>
-    <p class="hint">칫솔을 들고 평소처럼 닦아 주세요. 덧니가 다음에 닦을 곳을 알려줘요 🪥</p>
-    <div class="btn-row">
-      <button class="btn ghost" id="btn-recalib">🎨 칫솔 다시 저장</button>
-      <button class="btn ghost" id="btn-cam-quit">그만하기</button>
+
+    <div class="cam-ui-bottom">
+      <div class="cam-swatch" id="cam-swatch" hidden><i></i>내 칫솔</div>
+      <div class="cam-status" id="cam-status">얼굴을 찾는 중…</div>
+      <div class="zones" id="zones"></div>
     </div>
   </section>
 
@@ -551,6 +566,7 @@
   }
   function show(name) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 'screen-' + name));
+    document.documentElement.classList.toggle('cam-open', name === 'cam');
     window.scrollTo(0, 0);
   }
 
@@ -865,7 +881,7 @@
     guide: null, current: null, brushingSince: 0, lastResult: null, tiles: {},
     small: null, sctx: null, calib: { state: 'none', until: 0, color: null, handOffset: null, tries: 0 }, lastHead: null,
   };
-  const SMALL_W = 160, SMALL_H = 120;           // 색 추적용 축소 프레임 크기
+  let SMALL_W = 160, SMALL_H = 120;             // 색 추적용 축소 프레임 크기 (영상 비율에 맞춰 조정)
   const CALIB_SECONDS = 3;                        // 칫솔 저장 카운트다운
   const CALIB_RING = { x: 0.5, y: 0.55, r: 0.07 }; // 저장용 동그라미 (원본 프레임 정규화 좌표, r은 너비 기준)
 
@@ -970,7 +986,11 @@
     if (state.mode !== 'cam' || !cam.stream) return; // 그 사이 그만두었으면 중단
     loading.hidden = true;
     cam.ctx = cam.canvas.getContext('2d');
-    if (!cam.small) { cam.small = document.createElement('canvas'); cam.small.width = SMALL_W; cam.small.height = SMALL_H; cam.sctx = cam.small.getContext('2d', { willReadFrequently: true }); }
+    if (!cam.small) { cam.small = document.createElement('canvas'); cam.sctx = cam.small.getContext('2d', { willReadFrequently: true }); }
+    // 세로 모드 폰은 480x640처럼 세로로 긴 영상이 오므로 축소 프레임도 같은 비율로
+    const vw = cam.video.videoWidth || 640, vh = cam.video.videoHeight || 480;
+    if (vw >= vh) { SMALL_W = 160; SMALL_H = Math.round(160 * vh / vw); } else { SMALL_H = 160; SMALL_W = Math.round(160 * vw / vh); }
+    cam.small.width = SMALL_W; cam.small.height = SMALL_H;
     cam.ready = true;
     cam.calib = { state: 'none', until: 0, color: null, handOffset: null, tries: 0 };
     cam.lastHead = null;
