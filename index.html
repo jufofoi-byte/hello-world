@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>치아요정 덧니의 양치 대작전</title>
+<meta name="description" content="치아요정 덧니와 함께 2분 동안 충치균을 닦아내는 어린이 양치 게임">
+<meta name="theme-color" content="#e3f6ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="덧니 양치">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="64x64" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <style>
   :root {
     --sky: #e3f6ff;
@@ -742,6 +751,11 @@
   });
 
   renderStamps();
+
+  // 홈 화면 앱 설치를 위한 서비스 워커 (file:// 로 열었을 땐 건너뜀)
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
 })();
 </script>
 </body>

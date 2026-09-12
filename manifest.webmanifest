@@ -1,0 +1,17 @@
+{
+  "name": "치아요정 덧니의 양치 대작전",
+  "short_name": "덧니 양치",
+  "description": "치아요정 덧니와 함께 2분 동안 충치균을 닦아내는 어린이 양치 게임",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#e3f6ff",
+  "theme_color": "#e3f6ff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
