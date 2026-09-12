@@ -171,6 +171,30 @@
   .footer { display: flex; justify-content: center; gap: 12px; font-size: .85rem; color: #7a8699; }
   .footer button { background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; }
 
+  /* Camera mode */
+  .cam-card { padding: 8px; }
+  .cam-wrap { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #1b2430; border-radius: 14px; overflow: hidden; }
+  .cam-wrap video, .cam-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .cam-wrap canvas { pointer-events: none; }
+  .cam-status { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: rgba(47,58,74,.78); color: #fff; font-weight: 800; font-size: .9rem; padding: 6px 12px; border-radius: 999px; white-space: nowrap; max-width: 94%; overflow: hidden; text-overflow: ellipsis; }
+  .cam-status.brushing { background: rgba(79,195,247,.9); color: #123; }
+  .cam-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff; font-weight: 800; background: #1b2430; }
+  .cam-loading img { width: 90px; height: 90px; image-rendering: pixelated; object-fit: contain; animation: float 2s ease-in-out infinite; }
+  .cam-loading[hidden] { display: none; }
+  .zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .zone { position: relative; background: #f4f7fb; border-radius: 14px; padding: 8px 6px 10px; text-align: center; font-size: .78rem; font-weight: 800; color: #55637a; overflow: hidden; border: 3px solid transparent; transition: border-color .2s, transform .2s; }
+  .zone .germ-row { font-size: 1.1rem; line-height: 1.2; min-height: 1.3em; }
+  .zone .zbar { height: 8px; background: #e6edf5; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .zone .zbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--mint), var(--blue)); border-radius: 999px; transition: width .2s; }
+  .zone.target { border-color: var(--yellow); background: #fff8dc; }
+  .zone.active { transform: scale(1.04); border-color: var(--blue); }
+  .zone.clean { background: #e3fbf3; color: #1f8f6b; }
+  .zone.boss { border-color: #9c6ade; background: #efe6ff; animation: shake .5s ease-in-out infinite; }
+  .zone .boss-badge { position: absolute; top: 4px; right: 6px; font-size: 1rem; }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+  .zone.pop { animation: pop .35s ease; }
+  .privacy { font-size: .8rem; color: #7a8699; text-align: center; }
+
   @media (max-width: 380px) {
     h1 { font-size: 1.35rem; }
     .fairy { width: 140px; height: 140px; }
@@ -197,8 +221,10 @@
     </div>
 
     <div class="btn-row">
-      <button class="btn" id="btn-start">🪥 양치 시작!</button>
+      <button class="btn" id="btn-start">🪥 손가락으로 닦기</button>
+      <button class="btn secondary" id="btn-start-cam">📷 카메라로 진짜 닦기</button>
     </div>
+    <p class="privacy">카메라 모드는 얼굴과 칫솔 든 손을 인식해 6구역을 골고루 닦는지 봐줘요.<br>영상은 폰 안에서만 처리되고 어디에도 전송되지 않아요.</p>
 
     <div class="card stamps">
       <h2>🌟 나의 양치 도장판 <span id="stamp-total"></span></h2>
@@ -221,7 +247,7 @@
 
     <div class="hud">
       <div class="timer" id="timer">2:00</div>
-      <div class="bar"><i id="progress"></i><span id="progress-text">0%</span></div>
+      <div class="bar"><i class="progress-fill"></i><span class="progress-text">0%</span></div>
       <div class="score" id="score">0점</div>
     </div>
 
@@ -270,6 +296,34 @@
     <p class="hint" id="hint">칫솔을 누른 채로 이빨을 문질러 주세요 🪥</p>
   </section>
 
+  <!-- ===== 카메라 모드 화면 ===== -->
+  <section id="screen-cam" class="screen">
+    <div class="topbar">
+      <img class="fairy-mini" id="cam-fairy" src="assets/deotni/smile.png" alt="덧니">
+      <div class="bubble" id="cam-bubble">카메라를 준비하고 있어요…</div>
+    </div>
+
+    <div class="hud">
+      <div class="timer">2:00</div>
+      <div class="bar"><i class="progress-fill"></i><span class="progress-text">0%</span></div>
+      <div class="score">0점</div>
+    </div>
+
+    <div class="card cam-card">
+      <div class="cam-wrap">
+        <video id="cam-video" playsinline muted autoplay></video>
+        <canvas id="cam-overlay"></canvas>
+        <div class="cam-loading" id="cam-loading"><img src="assets/deotni/notepad.webp" alt=""><span id="cam-loading-text">카메라 켜는 중…</span></div>
+        <div class="cam-status" id="cam-status">얼굴을 찾는 중…</div>
+      </div>
+      <div class="zones" id="zones"></div>
+    </div>
+    <p class="hint">칫솔을 들고 평소처럼 닦아 주세요. 덧니가 다음에 닦을 곳을 알려줘요 🪥</p>
+    <div class="btn-row">
+      <button class="btn ghost" id="btn-cam-quit">그만하기</button>
+    </div>
+  </section>
+
   <!-- ===== 결과 화면 ===== -->
   <section id="screen-result" class="screen">
     <div class="fairy-wrap">
@@ -294,6 +348,7 @@
   </section>
 </div>
 
+<script src="brush-analyzer.js"></script>
 <script>
 (() => {
   'use strict';
@@ -312,7 +367,7 @@
 
   // ---------- 상태 ----------
   const state = {
-    running: false, teeth: [], score: 0, timeLeft: GAME_SECONDS,
+    mode: 'touch', running: false, teeth: [], score: 0, timeLeft: GAME_SECONDS,
     brushing: false, last: null, lastTs: 0, cleaned: 0, foamTick: 0, tipTimer: 0,
     boss: { active: false, tooth: -1, timer: 0, hp: 0, next: BOSS_FIRST_DELAY },
     said: { s60: false, s30: false, s10: false },
@@ -474,14 +529,16 @@
     cry: 'cry.png', giggle: 'giggle.png', ok: 'ok.png', confused: 'confused.png', cheer: 'cheer.png',
   };
   Object.values(MOODS).forEach((f) => { const i = new Image(); i.src = `assets/deotni/${f}`; }); // 미리 불러오기
-  function mood(name, target = '#game-fairy') {
+  function mood(name, target) {
+    target = target || (state.mode === 'cam' ? '#cam-fairy' : '#game-fairy');
     const img = $(target);
     img.src = `assets/deotni/${MOODS[name]}`;
-    if (target === '#game-fairy') { img.classList.remove('bounce'); void img.offsetWidth; img.classList.add('bounce'); }
+    if (target !== '#result-fairy') { img.classList.remove('bounce'); void img.offsetWidth; img.classList.add('bounce'); }
   }
 
   // ---------- 말풍선 / 화면 ----------
-  function say(text, target = '#game-bubble') {
+  function say(text, target) {
+    target = target || (state.mode === 'cam' ? '#cam-bubble' : '#game-bubble');
     const b = $(target);
     b.textContent = text;
     b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
@@ -517,14 +574,16 @@
 
   // ---------- HUD ----------
   function updateHud() {
-    const m = Math.floor(Math.max(0, state.timeLeft) / 60), s = Math.ceil(Math.max(0, state.timeLeft) % 60) % 60;
-    const timer = $('#timer');
-    timer.textContent = `${m}:${String(s).padStart(2, '0')}`;
-    timer.classList.toggle('hurry', state.timeLeft <= 15);
+    const total = Math.ceil(Math.max(0, state.timeLeft)), m = Math.floor(total / 60), s = total % 60;
     const pct = cleanPct();
-    $('#progress').style.width = pct + '%';
-    $('#progress-text').textContent = pct + '%';
-    $('#score').textContent = `${Math.round(state.score)}점`;
+    document.querySelectorAll('.timer').forEach((timer) => {
+      timer.textContent = `${m}:${String(s).padStart(2, '0')}`;
+      timer.classList.toggle('hurry', state.timeLeft <= 15);
+    });
+    document.querySelectorAll('.progress-fill').forEach((el) => { el.style.width = pct + '%'; });
+    document.querySelectorAll('.progress-text').forEach((el) => { el.textContent = pct + '%'; });
+    document.querySelectorAll('.score').forEach((el) => { el.textContent = `${Math.round(state.score)}점`; });
+    if (state.mode === 'cam') renderZones();
   }
   function cleanPct() {
     const total = state.teeth.length * 100;
@@ -571,8 +630,14 @@
     audio.scrub();
     if (++state.foamTick % 3 === 0) foam(p.x, p.y);
 
+    applyBrush(tooth, dist * BRUSH_POWER);
+    updateHud();
+    if (state.cleaned === state.teeth.length && !state.boss.active) endGame(true);
+  }
+
+  // 이빨 하나에 브러싱 양(충치균 %)을 적용한다. 손가락 모드와 카메라 모드가 함께 쓴다.
+  function applyBrush(tooth, amount) {
     const idx = state.teeth.indexOf(tooth);
-    const amount = dist * BRUSH_POWER; // 단위: 충치균 %
     if (tooth.plaque > 0) {
       const before = tooth.plaque;
       tooth.plaque = Math.max(0, tooth.plaque - amount);
@@ -580,21 +645,17 @@
       if (tooth.plaque <= 0 && !tooth.clean) {
         tooth.clean = true; state.cleaned++;
         state.score += 20;
-        sparkle(tooth);
-        floatText(tooth.cx, tooth.y - 4, '+20', '#ffd54f');
+        if (state.mode === 'touch') { sparkle(tooth); floatText(tooth.cx, tooth.y - 4, '+20', '#ffd54f'); }
         audio.ding();
         if (Math.random() < 0.6) { say(PRAISE[Math.floor(Math.random() * PRAISE.length)]); mood(Math.random() < 0.5 ? 'giggle' : 'cheer'); }
       }
       renderTooth(tooth);
     }
-    // 충치대장
     const boss = state.boss;
     if (boss.active && boss.tooth === idx) {
       boss.hp -= amount * 1.2;
       if (boss.hp <= 0) bossFlee(tooth);
     }
-    updateHud();
-    if (state.cleaned === state.teeth.length && !boss.active) endGame(true);
   }
   function onUp(e) {
     state.brushing = false;
@@ -621,6 +682,7 @@
     const t = state.teeth[boss.tooth];
     bossG.setAttribute('transform', `translate(${t.cx.toFixed(1)} ${t.cy.toFixed(1)})`);
     bossG.classList.add('show');
+    if (state.mode === 'cam') { const z = zoneOfTooth(boss.tooth); say(`👑 충치대장이 ${z.label}에 나타났어! 거길 닦아 줘!`); renderZones(); } else
     say('👑 충치대장 등장! 빨리 쫓아내 줘!');
     mood('angry');
     audio.boo();
@@ -629,10 +691,11 @@
     const boss = state.boss;
     boss.active = false; boss.tooth = -1; boss.next = delay;
     bossG.classList.remove('show');
+    if (state.mode === 'cam') renderZones();
   }
   function bossFlee(tooth) {
     state.score += 50;
-    floatText(tooth.cx, tooth.y - 10, '+50 으악!', '#ffd54f');
+    if (state.mode === 'touch') floatText(tooth.cx, tooth.y - 10, '+50 으악!', '#ffd54f');
     say('으악! 충치대장이 도망갔어! 🎉');
     mood('cheer');
     audio.flee();
@@ -644,7 +707,7 @@
     t.plaque = Math.min(100, t.plaque + 35);
     if (t.clean) { t.clean = false; state.cleaned--; }
     renderTooth(t);
-    floatText(t.cx, t.y - 10, '-충치균 붙음!', '#ff8a80');
+    if (state.mode === 'touch') floatText(t.cx, t.y - 10, '-충치균 붙음!', '#ff8a80');
     say('앗! 충치대장이 이빨을 더럽혔어… 다시 닦자!');
     mood('cry');
     audio.boo();
@@ -663,7 +726,8 @@
   }
 
   // ---------- 게임 루프 ----------
-  function startGame() {
+  function startGame(mode) {
+    state.mode = mode === 'cam' ? 'cam' : 'touch';
     audio.init();
     buildTeeth();
     state.running = true; state.score = 0; state.timeLeft = GAME_SECONDS; state.cleaned = 0;
@@ -673,10 +737,23 @@
     bossG.classList.remove('show');
     fxG.innerHTML = '';
     brushG.classList.remove('show', 'scrub');
+    if (state.mode === 'cam') {
+      cam.guide = { order: ['UR', 'UA', 'UL', 'LL', 'LA', 'LR'], idx: 0, timer: GUIDE_SECONDS };
+      buildZones();
+      say('카메라를 준비하고 있어요…');
+      mood('notepad');
+      updateHud();
+      show('cam');
+      camStart();  // 준비되면 안에서 타이머를 시작한다
+      return;
+    }
     say('칫솔을 누른 채로 쓱싹쓱싹 문질러 줘!');
     mood('smile');
     updateHud();
     show('game');
+    beginTimer();
+  }
+  function beginTimer() {
     state.lastTs = performance.now();
     requestAnimationFrame(loop);
   }
@@ -686,8 +763,9 @@
     state.lastTs = ts;
     state.timeLeft -= dt;
     tickBoss(dt);
+    if (state.mode === 'cam') tickGuide(dt);
     state.tipTimer -= dt;
-    if (state.tipTimer <= 0 && !state.boss.active) {
+    if (state.mode === 'touch' && state.tipTimer <= 0 && !state.boss.active) {
       say('💡 ' + TIPS[Math.floor(Math.random() * TIPS.length)]);
       mood('notepad');
       state.tipTimer = 14 + Math.random() * 6;
@@ -703,6 +781,7 @@
 
   function endGame(perfect) {
     state.running = false; state.brushing = false;
+    if (state.mode === 'cam') camStop();
     brushG.classList.remove('scrub');
     bossG.classList.remove('show');
     if (perfect) {
@@ -739,8 +818,10 @@
   }
 
   // ---------- 버튼 ----------
-  $('#btn-start').addEventListener('click', startGame);
-  $('#btn-again').addEventListener('click', startGame);
+  $('#btn-start').addEventListener('click', () => startGame('touch'));
+  $('#btn-start-cam').addEventListener('click', () => startGame('cam'));
+  $('#btn-again').addEventListener('click', () => startGame(state.mode));
+  $('#btn-cam-quit').addEventListener('click', () => { camStop(); state.running = false; renderStamps(); show('start'); });
   $('#btn-home').addEventListener('click', () => { renderStamps(); show('start'); });
   $('#btn-sound').addEventListener('click', (e) => {
     audio.on = !audio.on;
@@ -749,6 +830,230 @@
   $('#btn-reset').addEventListener('click', () => {
     if (confirm('도장판을 모두 지울까요?')) { saveStamps({}); renderStamps(); }
   });
+
+  // ======================================================================
+  // 카메라 모드: 얼굴·손을 인식해서 6구역(위/아래 × 오른쪽 어금니/앞니/왼쪽 어금니)을 판정
+  // ======================================================================
+  const GUIDE_SECONDS = 20;           // 덧니가 한 구역을 안내하는 시간
+  const CAM_RATE = 8;                 // 닦는 중일 때 구역 안 이빨마다 초당 줄어드는 충치균(%)
+  const CAM_TARGET_BONUS = 1.3;       // 덧니가 안내한 구역을 닦을 때 보너스 배율
+  // 타일은 거울처럼 배치: 화면 왼쪽 = 사용자의 왼쪽
+  const ZONES = [
+    { id: 'UL', label: '왼쪽 위 어금니', teeth: [6, 7] },
+    { id: 'UA', label: '위 앞니', teeth: [2, 3, 4, 5] },
+    { id: 'UR', label: '오른쪽 위 어금니', teeth: [0, 1] },
+    { id: 'LL', label: '왼쪽 아래 어금니', teeth: [14, 15] },
+    { id: 'LA', label: '아래 앞니', teeth: [10, 11, 12, 13] },
+    { id: 'LR', label: '오른쪽 아래 어금니', teeth: [8, 9] },
+  ];
+  const zoneById = (id) => ZONES.find((z) => z.id === id);
+  const zoneOfTooth = (i) => ZONES.find((z) => z.teeth.includes(i));
+  const zonePct = (z) => Math.round(z.teeth.reduce((a, i) => a + (100 - Math.max(0, state.teeth[i].plaque)), 0) / z.teeth.length);
+
+  const cam = {
+    stream: null, video: $('#cam-video'), canvas: $('#cam-overlay'), ctx: null,
+    face: null, hand: null, analyzer: null, raf: 0, lastVideoTime: -1, ready: false,
+    guide: null, current: null, brushingSince: 0, lastResult: null, tiles: {},
+  };
+
+  function buildZones() {
+    const wrap = $('#zones');
+    wrap.innerHTML = '';
+    cam.tiles = {};
+    for (const z of ZONES) {
+      const el = document.createElement('div');
+      el.className = 'zone'; el.id = 'zone-' + z.id;
+      el.innerHTML = `<div class="germ-row"></div><div>${z.label}</div><div class="zbar"><i></i></div><span class="boss-badge" hidden>👑</span>`;
+      wrap.appendChild(el);
+      cam.tiles[z.id] = el;
+    }
+    renderZones();
+  }
+
+  function renderZones() {
+    const target = cam.guide ? cam.guide.order[cam.guide.idx] : null;
+    const bossZone = state.boss.active ? zoneOfTooth(state.boss.tooth).id : null;
+    for (const z of ZONES) {
+      const el = cam.tiles[z.id]; if (!el) continue;
+      const pct = zonePct(z);
+      const clean = z.teeth.every((i) => state.teeth[i].clean);
+      el.querySelector('.zbar i').style.width = pct + '%';
+      const germs = z.teeth.filter((i) => !state.teeth[i].clean).length;
+      el.querySelector('.germ-row').textContent = clean ? '✨' : '🦠'.repeat(Math.min(4, germs));
+      el.classList.toggle('clean', clean);
+      el.classList.toggle('target', z.id === target && !clean);
+      el.classList.toggle('active', cam.current === z.id);
+      el.classList.toggle('boss', bossZone === z.id);
+      el.querySelector('.boss-badge').hidden = bossZone !== z.id;
+    }
+  }
+
+  function tickGuide(dt) {
+    const g = cam.guide; if (!g) return;
+    const cur = zoneById(g.order[g.idx]);
+    const curClean = cur.teeth.every((i) => state.teeth[i].clean);
+    g.timer -= dt;
+    if (g.timer <= 0 || curClean) {
+      // 다음 안내 구역: 순서대로 돌되, 이미 깨끗한 곳은 건너뛴다
+      let next = -1;
+      for (let k = 1; k <= g.order.length; k++) {
+        const j = (g.idx + k) % g.order.length;
+        if (!zoneById(g.order[j]).teeth.every((i) => state.teeth[i].clean)) { next = j; break; }
+      }
+      if (next >= 0 && (next !== g.idx || curClean)) {
+        g.idx = next; g.timer = GUIDE_SECONDS;
+        const z = zoneById(g.order[g.idx]);
+        if (!state.boss.active) { say(`이제 ${z.label}를 닦아 줘!`); mood('wand'); }
+        renderZones();
+      } else g.timer = GUIDE_SECONDS;
+    }
+  }
+
+  function camStatus(text, brushing) {
+    const el = $('#cam-status');
+    if (el.textContent !== text) el.textContent = text;
+    el.classList.toggle('brushing', !!brushing);
+  }
+
+  async function camStart() {
+    const loading = $('#cam-loading'), ltext = $('#cam-loading-text');
+    loading.hidden = false;
+    cam.ready = false; cam.current = null; cam.lastVideoTime = -1;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      ltext.textContent = '이 브라우저에서는 카메라를 쓸 수 없어요';
+      say('앗, 여기서는 카메라를 못 켜… 손가락 모드로 해 볼까?'); mood('confused');
+      return;
+    }
+    try {
+      // 사용자 터치 직후에 바로 권한을 요청해야 iOS에서도 열린다
+      cam.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+      cam.video.srcObject = cam.stream;
+      await cam.video.play();
+    } catch (err) {
+      ltext.textContent = '카메라 권한이 필요해요';
+      say('카메라를 허용해 줘야 얼굴을 볼 수 있어! 손가락 모드로 해도 좋아.'); mood('cry');
+      return;
+    }
+    try {
+      if (!cam.face || !cam.hand) {
+        ltext.textContent = '덧니가 눈을 뜨는 중… (처음엔 조금 걸려요)';
+        const mp = await import('./vendor/mediapipe/vision_bundle.mjs');
+        const fileset = await mp.FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
+        const make = async (delegate) => {
+          const face = await mp.FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './models/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 1 });
+          const hand = await mp.HandLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './models/hand_landmarker.task', delegate }, runningMode: 'VIDEO', numHands: 2 });
+          return { face, hand };
+        };
+        let r;
+        try { r = await make('GPU'); } catch (e) { r = await make('CPU'); }
+        cam.face = r.face; cam.hand = r.hand;
+      }
+      cam.analyzer = BrushAnalyzer.createAnalyzer();
+    } catch (err) {
+      ltext.textContent = '인식 준비에 실패했어요: ' + (err && err.message ? err.message : err);
+      say('으앙, 눈이 잘 안 떠져… 잠시 후 다시 해 볼래?'); mood('cry');
+      return;
+    }
+    if (state.mode !== 'cam' || !cam.stream) return; // 그 사이 그만두었으면 중단
+    loading.hidden = true;
+    cam.ctx = cam.canvas.getContext('2d');
+    cam.ready = true;
+    say('얼굴을 화면 가운데에 두고 칫솔을 들어 줘!'); mood('smile');
+    camStatus('얼굴을 찾는 중…');
+    beginTimer();
+    cam.raf = requestAnimationFrame(camLoop);
+  }
+
+  function camStop() {
+    cam.ready = false;
+    cancelAnimationFrame(cam.raf);
+    if (cam.stream) { cam.stream.getTracks().forEach((t) => t.stop()); cam.stream = null; }
+    cam.video.srcObject = null;
+    cam.current = null;
+    if (cam.ctx) cam.ctx.clearRect(0, 0, cam.canvas.width, cam.canvas.height);
+  }
+
+  function camLoop() {
+    if (!cam.ready || !state.running) return;
+    cam.raf = requestAnimationFrame(camLoop);
+    const v = cam.video;
+    if (v.readyState < 2 || v.currentTime === cam.lastVideoTime) return;
+    const dt = cam.lastVideoTime < 0 ? 0 : Math.min(0.1, v.currentTime - cam.lastVideoTime);
+    cam.lastVideoTime = v.currentTime;
+    const now = performance.now();
+    let face = null, hands = [];
+    try {
+      const fr = cam.face.detectForVideo(v, now);
+      face = fr.faceLandmarks && fr.faceLandmarks[0] ? fr.faceLandmarks[0] : null;
+      const hr = cam.hand.detectForVideo(v, now);
+      hands = hr.landmarks || [];
+    } catch (e) { return; }
+    const r = cam.analyzer.update(face, hands, now / 1000);
+    cam.lastResult = r;
+    let statusText = '', brushing = false;
+    if (r.status === 'noface') statusText = '얼굴이 잘 안 보여요. 화면 가운데로!';
+    else if (r.status === 'nohand') statusText = '칫솔 든 손을 보여 줘요';
+    else if (r.status === 'far') statusText = '칫솔을 입 쪽으로!';
+    else if (r.status === 'idle') statusText = `${zoneById(r.zone).label} · 쓱싹쓱싹 움직여 봐요`;
+    else { brushing = true; statusText = `${zoneById(r.zone).label} 닦는 중!`; }
+    camStatus(statusText, brushing);
+
+    const newCurrent = r.zone || null;
+    if (newCurrent !== cam.current) { cam.current = newCurrent; renderZones(); }
+
+    if (brushing && dt > 0) {
+      const z = zoneById(r.zone);
+      const target = cam.guide && cam.guide.order[cam.guide.idx] === z.id;
+      const amount = CAM_RATE * dt * (target ? CAM_TARGET_BONUS : 1);
+      for (const i of z.teeth) applyBrush(state.teeth[i], amount);
+      if (Math.random() < 0.5) audio.scrub();
+      updateHud();
+      if (state.cleaned === state.teeth.length && !state.boss.active) { endGame(true); return; }
+    }
+    drawOverlay(r, face);
+  }
+
+  function drawOverlay(r, face) {
+    const c = cam.canvas, v = cam.video, ctx = cam.ctx;
+    if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight; }
+    const W = c.width, H = c.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!face || !r.mouth) return;
+    const m = r.mouth;
+    const cx = m.center.x * W, cy = m.center.y * H;
+    const zw = m.faceW * W * 0.62, zh = m.faceH * H * 0.16;   // 6구역 격자 크기
+    const colW = zw / 3, rowH = zh / 2;
+    const bossZone = state.boss.active ? zoneOfTooth(state.boss.tooth).id : null;
+    // 원본 좌표에서 x가 작은 쪽이 사용자의 오른쪽
+    const cols = ['R', 'A', 'L'], rows = ['U', 'L'];
+    ctx.lineWidth = 2;
+    for (let ri = 0; ri < 2; ri++) for (let ci = 0; ci < 3; ci++) {
+      const id = rows[ri] + cols[ci];
+      const z = zoneById(id);
+      const pct = zonePct(z) / 100;
+      const x = cx - zw / 2 + ci * colW, y = cy - zh / 2 + ri * rowH;
+      const active = cam.current === id && r.brushing;
+      const target = cam.guide && cam.guide.order[cam.guide.idx] === id;
+      ctx.fillStyle = bossZone === id ? 'rgba(156,106,222,.45)' : `rgba(${Math.round(255 - 140 * pct)}, ${Math.round(200 + 55 * pct)}, ${Math.round(120 + 110 * pct)}, ${active ? .55 : .3})`;
+      ctx.strokeStyle = active ? '#4fc3f7' : target ? '#ffd54f' : 'rgba(255,255,255,.7)';
+      ctx.lineWidth = active || target ? 4 : 2;
+      roundRect(ctx, x + 2, y + 2, colW - 4, rowH - 4, 8); ctx.fill(); ctx.stroke();
+    }
+    // 칫솔 머리 추정 위치
+    if (r.head) {
+      ctx.beginPath(); ctx.arc(r.head.x * W, r.head.y * H, 12, 0, Math.PI * 2);
+      ctx.fillStyle = r.brushing ? 'rgba(79,195,247,.9)' : 'rgba(255,255,255,.8)'; ctx.fill();
+      ctx.strokeStyle = '#2f3a4a'; ctx.lineWidth = 2; ctx.stroke();
+      if (r.grip) { ctx.beginPath(); ctx.moveTo(r.grip.x * W, r.grip.y * H); ctx.lineTo(r.head.x * W, r.head.y * H); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 4; ctx.stroke(); }
+    }
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+  }
 
   renderStamps();
 
