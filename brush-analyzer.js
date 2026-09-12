@@ -15,11 +15,13 @@
   const DEFAULTS = {
     handleLen: 0.42,      // 손아귀 중심에서 칫솔 머리까지 거리 (얼굴 너비 배수)
     nearDist: 0.6,        // 칫솔 머리가 입 중심에서 이 거리(얼굴 너비 배수) 안이면 "입 근처"
-    minSpeed: 0.5,        // 손 움직임 속도(얼굴 너비/초) 최소값. 이보다 빠르게 흔들려야 "닦는 중"
+    window: 1.0,          // 움직임을 누적해 보는 시간 창(초)
+    minMotion: 0.04,      // 시간 창 동안 손이 움직인 폭(얼굴 너비 배수, 약 0.6cm)이 이 이상이면 "닦는 중". 천천히 움직여도 통과
+    gripSmooth: 0.5,      // 손 위치 EMA 계수(인식 흔들림 완화)
     sideBand: 0.16,       // |dx| 가 이 값(얼굴 너비 배수)보다 크면 어금니 구역
     rowBand: 0.015,       // |dy| 가 이 값(얼굴 높이 배수)보다 작으면 이전 위/아래 유지
-    smooth: 0.35,         // 칫솔 머리 위치 EMA 계수
     zoneHold: 0.35,       // 새 구역으로 바꾸기 전 유지해야 하는 시간(초)
+    strokeRatio: 1.6,     // 세로/가로 움직임 비율이 이 이상이면 '위아래', 역수 이하이면 '좌우' 모션
   };
 
   const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
@@ -55,17 +57,35 @@
 
   function createAnalyzer(options) {
     const opts = Object.assign({}, DEFAULTS, options || {});
-    let prev = null;           // { grip, head(smoothed), row, zone, t }
+    let prev = null;           // { row, zone }
     let candidate = null;      // { zone, since }
+    let hist = [];             // 최근 시간 창 안의 { t, grip, head }
 
-    function reset() { prev = null; candidate = null; }
+    function reset() { prev = null; candidate = null; hist = []; }
+
+    // 시간 창 안의 움직임 요약: 손이 움직인 폭(가로/세로 범위), 평균 머리 위치, 모션 방향
+    // 이동 거리 합 대신 범위를 쓰면 인식 흔들림(작은 떨림)이 누적되어 오판하는 일이 없다.
+    function summarize(faceW) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, mx = 0, my = 0;
+      for (const h of hist) {
+        mx += h.head.x; my += h.head.y;
+        if (h.grip.x < minX) minX = h.grip.x; if (h.grip.x > maxX) maxX = h.grip.x;
+        if (h.grip.y < minY) minY = h.grip.y; if (h.grip.y > maxY) maxY = h.grip.y;
+      }
+      const n = hist.length || 1;
+      const rx = (maxX - minX) / faceW, ry = (maxY - minY) / faceW;
+      const motion = Math.max(rx, ry);
+      const ratio = ry / (rx || 1e-6);
+      const stroke = motion < opts.minMotion * 0.6 ? null : ratio >= opts.strokeRatio ? 'vertical' : ratio <= 1 / opts.strokeRatio ? 'horizontal' : 'mixed';
+      return { motion, meanHead: { x: mx / n, y: my / n }, stroke };
+    }
 
     // face: 468+ 랜드마크 배열 또는 null, hands: 손 랜드마크 배열의 배열, t: 초 단위 시각
     function update(face, hands, t) {
       if (!face) { reset(); return { status: 'noface', zone: null, brushing: false }; }
       const m = mouthInfo(face);
       if (!hands || !hands.length) {
-        prev = prev ? { ...prev, grip: null } : null;
+        hist = [];
         return { status: 'nohand', zone: null, brushing: false, mouth: m };
       }
       let best = null;
@@ -74,10 +94,15 @@
         const d = dist(e.head, m.center) / m.faceW;
         if (!best || d < best.d) best = { ...e, d };
       }
-      let head = best.head;
-      if (prev && prev.head) head = add(mul(prev.head, 1 - opts.smooth), mul(best.head, opts.smooth));
-      const dt = prev && prev.t != null ? Math.max(1e-3, t - prev.t) : null;
-      const speed = prev && prev.grip && dt ? dist(best.grip, prev.grip) / dt / m.faceW : 0;
+      const last = hist.length ? hist[hist.length - 1] : null;
+      const a = opts.gripSmooth;
+      const grip = last ? add(mul(last.grip, 1 - a), mul(best.grip, a)) : best.grip;
+      const rawHead = last ? add(mul(last.head, 1 - a), mul(best.head, a)) : best.head;
+      hist.push({ t, grip, head: rawHead });
+      while (hist.length && t - hist[0].t > opts.window) hist.shift();
+      const sum = summarize(m.faceW);
+      // 위/아래·좌우 판정은 시간 창 평균 위치로: 앞니를 위아래로 닦을 때 구역이 흔들리지 않는다
+      const head = sum.meanHead;
       const near = best.d < opts.nearDist;
       const dx = (head.x - m.center.x) / m.faceW;
       const dy = (head.y - m.center.y) / m.faceH;
@@ -91,9 +116,13 @@
         else if (t - candidate.since >= opts.zoneHold) { zone = c.zone; candidate = null; }
       } else candidate = null;
 
-      const brushing = near && speed >= opts.minSpeed;
-      prev = { grip: best.grip, head, row: zone[0] === 'U' ? 'upper' : 'lower', zone, t };
-      return { status: near ? (brushing ? 'brushing' : 'idle') : 'far', zone: near ? zone : null, brushing, head, grip: best.grip, speed, near, mouth: m, dx, dy };
+      const brushing = near && sum.motion >= opts.minMotion;
+      prev = { row: zone[0] === 'U' ? 'upper' : 'lower', zone };
+      // 권장 모션: 앞니(A)는 위아래, 어금니(R/L)는 좌우
+      const wanted = zone[1] === 'A' ? 'vertical' : 'horizontal';
+      const goodStroke = brushing && sum.stroke === wanted;
+      return { status: near ? (brushing ? 'brushing' : 'idle') : 'far', zone: near ? zone : null, brushing, head: best.head, grip: best.grip,
+        motion: sum.motion, stroke: sum.stroke, wanted, goodStroke, near, mouth: m, dx, dy };
     }
 
     return { update, reset, opts };

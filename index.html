@@ -837,6 +837,7 @@
   const GUIDE_SECONDS = 20;           // 덧니가 한 구역을 안내하는 시간
   const CAM_RATE = 8;                 // 닦는 중일 때 구역 안 이빨마다 초당 줄어드는 충치균(%)
   const CAM_TARGET_BONUS = 1.3;       // 덧니가 안내한 구역을 닦을 때 보너스 배율
+  const CAM_STROKE_BONUS = 1.2;       // 권장 모션(앞니 위아래, 어금니 좌우)으로 닦을 때 보너스 배율
   // 타일은 거울처럼 배치: 화면 왼쪽 = 사용자의 왼쪽
   const ZONES = [
     { id: 'UL', label: '왼쪽 위 어금니', teeth: [6, 7] },
@@ -994,8 +995,14 @@
     if (r.status === 'noface') statusText = '얼굴이 잘 안 보여요. 화면 가운데로!';
     else if (r.status === 'nohand') statusText = '칫솔 든 손을 보여 줘요';
     else if (r.status === 'far') statusText = '칫솔을 입 쪽으로!';
-    else if (r.status === 'idle') statusText = `${zoneById(r.zone).label} · 쓱싹쓱싹 움직여 봐요`;
-    else { brushing = true; statusText = `${zoneById(r.zone).label} 닦는 중!`; }
+    else if (r.status === 'idle') statusText = `${zoneById(r.zone).label} · 천천히 움직여 봐요`;
+    else {
+      brushing = true;
+      const label = zoneById(r.zone).label;
+      if (r.goodStroke) statusText = `${label} 닦는 중! 👍`;
+      else if (r.stroke && r.stroke !== 'mixed') statusText = `${label} · ${r.wanted === 'vertical' ? '앞니는 위아래로!' : '어금니는 옆으로!'}`;
+      else statusText = `${label} 닦는 중!`;
+    }
     camStatus(statusText, brushing);
 
     const newCurrent = r.zone || null;
@@ -1004,7 +1011,7 @@
     if (brushing && dt > 0) {
       const z = zoneById(r.zone);
       const target = cam.guide && cam.guide.order[cam.guide.idx] === z.id;
-      const amount = CAM_RATE * dt * (target ? CAM_TARGET_BONUS : 1);
+      const amount = CAM_RATE * dt * (target ? CAM_TARGET_BONUS : 1) * (r.goodStroke ? CAM_STROKE_BONUS : 1);
       for (const i of z.teeth) applyBrush(state.teeth[i], amount);
       if (Math.random() < 0.5) audio.scrub();
       updateHud();
