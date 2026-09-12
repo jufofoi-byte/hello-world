@@ -194,6 +194,9 @@
   @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
   .zone.pop { animation: pop .35s ease; }
   .privacy { font-size: .8rem; color: #7a8699; text-align: center; }
+  .cam-swatch { position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.85); border-radius: 999px; padding: 4px 10px 4px 4px; font-size: .75rem; font-weight: 800; color: #2f3a4a; }
+  .cam-swatch i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); display: block; }
+  .cam-swatch[hidden] { display: none; }
 
   @media (max-width: 380px) {
     h1 { font-size: 1.35rem; }
@@ -315,11 +318,13 @@
         <canvas id="cam-overlay"></canvas>
         <div class="cam-loading" id="cam-loading"><img src="assets/deotni/notepad.webp" alt=""><span id="cam-loading-text">카메라 켜는 중…</span></div>
         <div class="cam-status" id="cam-status">얼굴을 찾는 중…</div>
+        <div class="cam-swatch" id="cam-swatch" hidden><i></i>내 칫솔</div>
       </div>
       <div class="zones" id="zones"></div>
     </div>
     <p class="hint">칫솔을 들고 평소처럼 닦아 주세요. 덧니가 다음에 닦을 곳을 알려줘요 🪥</p>
     <div class="btn-row">
+      <button class="btn ghost" id="btn-recalib">🎨 칫솔 다시 저장</button>
       <button class="btn ghost" id="btn-cam-quit">그만하기</button>
     </div>
   </section>
@@ -349,6 +354,7 @@
 </div>
 
 <script src="brush-analyzer.js"></script>
+<script src="brush-tracker.js"></script>
 <script>
 (() => {
   'use strict';
@@ -761,6 +767,7 @@
     if (!state.running) return;
     const dt = Math.min(0.1, (ts - state.lastTs) / 1000);
     state.lastTs = ts;
+    if (state.mode === 'cam' && cam.calib.state !== 'done') { requestAnimationFrame(loop); return; } // 칫솔 저장 중엔 시계 멈춤
     state.timeLeft -= dt;
     tickBoss(dt);
     if (state.mode === 'cam') tickGuide(dt);
@@ -822,6 +829,7 @@
   $('#btn-start-cam').addEventListener('click', () => startGame('cam'));
   $('#btn-again').addEventListener('click', () => startGame(state.mode));
   $('#btn-cam-quit').addEventListener('click', () => { camStop(); state.running = false; renderStamps(); show('start'); });
+  $('#btn-recalib').addEventListener('click', () => { if (cam.ready) startCalibration(); });
   $('#btn-home').addEventListener('click', () => { renderStamps(); show('start'); });
   $('#btn-sound').addEventListener('click', (e) => {
     audio.on = !audio.on;
@@ -855,7 +863,11 @@
     stream: null, video: $('#cam-video'), canvas: $('#cam-overlay'), ctx: null,
     face: null, hand: null, analyzer: null, raf: 0, lastVideoTime: -1, ready: false,
     guide: null, current: null, brushingSince: 0, lastResult: null, tiles: {},
+    small: null, sctx: null, calib: { state: 'none', until: 0, color: null, handOffset: null, tries: 0 }, lastHead: null,
   };
+  const SMALL_W = 160, SMALL_H = 120;           // 색 추적용 축소 프레임 크기
+  const CALIB_SECONDS = 3;                        // 칫솔 저장 카운트다운
+  const CALIB_RING = { x: 0.5, y: 0.55, r: 0.07 }; // 저장용 동그라미 (원본 프레임 정규화 좌표, r은 너비 기준)
 
   function buildZones() {
     const wrap = $('#zones');
@@ -958,9 +970,11 @@
     if (state.mode !== 'cam' || !cam.stream) return; // 그 사이 그만두었으면 중단
     loading.hidden = true;
     cam.ctx = cam.canvas.getContext('2d');
+    if (!cam.small) { cam.small = document.createElement('canvas'); cam.small.width = SMALL_W; cam.small.height = SMALL_H; cam.sctx = cam.small.getContext('2d', { willReadFrequently: true }); }
     cam.ready = true;
-    say('얼굴을 화면 가운데에 두고 칫솔을 들어 줘!'); mood('smile');
-    camStatus('얼굴을 찾는 중…');
+    cam.calib = { state: 'none', until: 0, color: null, handOffset: null, tries: 0 };
+    cam.lastHead = null;
+    startCalibration();
     beginTimer();
     cam.raf = requestAnimationFrame(camLoop);
   }
@@ -971,6 +985,7 @@
     if (cam.stream) { cam.stream.getTracks().forEach((t) => t.stop()); cam.stream = null; }
     cam.video.srcObject = null;
     cam.current = null;
+    cam.lastHead = null;
     if (cam.ctx) cam.ctx.clearRect(0, 0, cam.canvas.width, cam.canvas.height);
   }
 
@@ -989,11 +1004,35 @@
       const hr = cam.hand.detectForVideo(v, now);
       hands = hr.landmarks || [];
     } catch (e) { return; }
-    const r = cam.analyzer.update(face, hands, now / 1000);
+    // 축소 프레임 (색 추적·칫솔 저장에 사용)
+    cam.sctx.drawImage(v, 0, 0, SMALL_W, SMALL_H);
+    const frame = cam.sctx.getImageData(0, 0, SMALL_W, SMALL_H).data;
+
+    if (cam.calib.state === 'sampling') {
+      const left = Math.max(0, cam.calib.until - now);
+      cam.calib.frames = (cam.calib.frames || 0) + 1;
+      camStatus(`칫솔 머리를 동그라미 안에! ${Math.ceil(left / 1000)}`);
+      if (left <= 0 && cam.calib.frames >= 8) finishCalibration(frame, face, hands); // 느린 기기에서도 몇 프레임은 보고 저장
+      drawOverlay(null, face, true);
+      return;
+    }
+
+    // 저장된 칫솔 색으로 입 주변에서 칫솔 머리 찾기
+    let extHead = null;
+    if (face && cam.calib.color) {
+      const m = BrushAnalyzer.mouthInfo(face);
+      const win = { x0: (m.center.x - m.faceW * 0.95) * SMALL_W, x1: (m.center.x + m.faceW * 0.95) * SMALL_W, y0: (m.center.y - m.faceH * 0.55) * SMALL_H, y1: (m.center.y + m.faceH * 0.55) * SMALL_H };
+      const prev = cam.lastHead ? { x: cam.lastHead.x * SMALL_W, y: cam.lastHead.y * SMALL_H, r: m.faceW * SMALL_W * BrushTracker.DEFAULTS.nearRadius } : null;
+      const blob = BrushTracker.findBlob(frame, SMALL_W, SMALL_H, cam.calib.color, win, prev);
+      if (blob) extHead = { x: blob.x / SMALL_W, y: blob.y / SMALL_H };
+    }
+    cam.lastHead = extHead;
+
+    const r = cam.analyzer.update(face, hands, now / 1000, extHead, cam.calib.handOffset);
     cam.lastResult = r;
     let statusText = '', brushing = false;
     if (r.status === 'noface') statusText = '얼굴이 잘 안 보여요. 화면 가운데로!';
-    else if (r.status === 'nohand') statusText = '칫솔 든 손을 보여 줘요';
+    else if (r.status === 'nohand') statusText = '칫솔이 안 보여요. 칫솔 머리를 보여 줘요';
     else if (r.status === 'far') statusText = '칫솔을 입 쪽으로!';
     else if (r.status === 'idle') statusText = `${zoneById(r.zone).label} · 천천히 움직여 봐요`;
     else {
@@ -1020,12 +1059,69 @@
     drawOverlay(r, face);
   }
 
-  function drawOverlay(r, face) {
+  function startCalibration() {
+    cam.calib.state = 'sampling';
+    cam.calib.until = performance.now() + CALIB_SECONDS * 1000;
+    cam.calib.frames = 0;
+    cam.lastHead = null;
+    $('#cam-swatch').hidden = true;
+    say('칫솔 머리(색깔 있는 쪽)를 동그라미 안에 넣고 잠깐 기다려 줘!'); mood('wand');
+  }
+
+  function finishCalibration(frame, face, hands) {
+    const c = cam.calib;
+    const cx = CALIB_RING.x * SMALL_W, cy = CALIB_RING.y * SMALL_H, r = CALIB_RING.r * SMALL_W;
+    const color = BrushTracker.sampleColor(frame, SMALL_W, SMALL_H, cx, cy, r);
+    // 피부색과 너무 비슷하면(손을 넣었거나 칫솔이 살구색이면) 한 번 더 시도하게 한다
+    let skinLike = false;
+    if (face && color) {
+      for (const i of [BrushAnalyzer.FACE.cheekL, BrushAnalyzer.FACE.cheekR]) {
+        const p = face[i];
+        const skin = BrushTracker.sampleColor(frame, SMALL_W, SMALL_H, p.x * SMALL_W, p.y * SMALL_H, 3);
+        if (skin && BrushTracker.chromaDist(skin, color) < 12) skinLike = true;
+      }
+    }
+    if (!color || (skinLike && c.tries < 2)) {
+      c.tries++;
+      c.until = performance.now() + CALIB_SECONDS * 1000; c.frames = 0;
+      say(skinLike ? '피부색이랑 비슷해… 칫솔의 색깔 있는 부분을 보여 줘!' : '잘 안 보여… 한 번만 더!'); mood('confused');
+      return;
+    }
+    c.color = color; c.state = 'done'; c.tries = 0;
+    // 손이 보이면 "이 손 모양일 때 칫솔 머리는 여기" 를 기억해 색으로 못 찾을 때 쓴다
+    c.handOffset = null;
+    if (hands && hands.length) {
+      const ring = { x: CALIB_RING.x, y: CALIB_RING.y };
+      let best = null;
+      for (const h of hands) { const g = BrushAnalyzer.handFrame(h).grip; const d = Math.hypot(g.x - ring.x, g.y - ring.y); if (!best || d < best.d) best = { h, d }; }
+      if (best && best.d < 0.35) c.handOffset = BrushAnalyzer.learnOffset(best.h, ring);
+    }
+    const sw = $('#cam-swatch');
+    sw.querySelector('i').style.background = yccToCss(color);
+    sw.hidden = false;
+    cam.analyzer.reset();
+    say('칫솔 저장 완료! 얼굴을 가운데에 두고 닦아 보자!'); mood('cheer');
+    audio.ding();
+  }
+  function yccToCss(c) {
+    const r = c.y + 1.402 * (c.cr - 128), g = c.y - 0.344136 * (c.cb - 128) - 0.714136 * (c.cr - 128), b = c.y + 1.772 * (c.cb - 128);
+    const cl = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    return `rgb(${cl(r)},${cl(g)},${cl(b)})`;
+  }
+
+  function drawOverlay(r, face, calibrating) {
     const c = cam.canvas, v = cam.video, ctx = cam.ctx;
     if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight; }
     const W = c.width, H = c.height;
     ctx.clearRect(0, 0, W, H);
-    if (!face || !r.mouth) return;
+    if (calibrating) {
+      const rx = CALIB_RING.x * W, ry = CALIB_RING.y * H, rr = CALIB_RING.r * W;
+      ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 6; ctx.setLineDash([12, 8]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(rx, ry, rr + 8, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2; ctx.stroke();
+      return;
+    }
+    if (!face || !r || !r.mouth) return;
     const m = r.mouth;
     const cx = m.center.x * W, cy = m.center.y * H;
     const zw = m.faceW * W * 0.62, zh = m.faceH * H * 0.16;   // 6구역 격자 크기
@@ -1049,7 +1145,7 @@
     // 칫솔 머리 추정 위치
     if (r.head) {
       ctx.beginPath(); ctx.arc(r.head.x * W, r.head.y * H, 12, 0, Math.PI * 2);
-      ctx.fillStyle = r.brushing ? 'rgba(79,195,247,.9)' : 'rgba(255,255,255,.8)'; ctx.fill();
+      ctx.fillStyle = r.brushing ? 'rgba(79,195,247,.9)' : r.source === 'color' ? 'rgba(255,213,79,.9)' : 'rgba(255,255,255,.8)'; ctx.fill();
       ctx.strokeStyle = '#2f3a4a'; ctx.lineWidth = 2; ctx.stroke();
       if (r.grip) { ctx.beginPath(); ctx.moveTo(r.grip.x * W, r.grip.y * H); ctx.lineTo(r.head.x * W, r.head.y * H); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 4; ctx.stroke(); }
     }

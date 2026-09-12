@@ -49,6 +49,26 @@
     return { grip, dir, head };
   }
 
+  // 손 좌표계: e1 = 새끼→검지 MCP 방향, e2 = 그 수직, 크기 = 손목~중지 MCP 길이
+  function handFrame(hand) {
+    const grip = mid(hand[HAND.indexMcp], hand[HAND.pinkyMcp]);
+    const e1 = norm(sub(hand[HAND.indexMcp], hand[HAND.pinkyMcp]));
+    const e2 = { x: -e1.y, y: e1.x };
+    const scale = dist(hand[HAND.wrist], hand[HAND.middleMcp]) || 1e-6;
+    return { grip, e1, e2, scale };
+  }
+  // 저장(보정) 시점에 관측한 칫솔 머리 위치를 손 좌표계 오프셋으로 기록
+  function learnOffset(hand, head) {
+    const f = handFrame(hand);
+    const d = sub(head, f.grip);
+    return { u: (d.x * f.e1.x + d.y * f.e1.y) / f.scale, v: (d.x * f.e2.x + d.y * f.e2.y) / f.scale };
+  }
+  // 기록한 오프셋으로 현재 손에서 칫솔 머리 위치를 복원
+  function applyOffset(hand, off) {
+    const f = handFrame(hand);
+    return { grip: f.grip, head: add(f.grip, add(mul(f.e1, off.u * f.scale), mul(f.e2, off.v * f.scale))) };
+  }
+
   function classify(dx, dy, prevRow, opts) {
     const col = dx < -opts.sideBand ? 'right' : dx > opts.sideBand ? 'left' : 'front';
     let row = dy < -opts.rowBand ? 'upper' : dy > opts.rowBand ? 'lower' : prevRow || 'upper';
@@ -81,18 +101,25 @@
     }
 
     // face: 468+ 랜드마크 배열 또는 null, hands: 손 랜드마크 배열의 배열, t: 초 단위 시각
-    function update(face, hands, t) {
+    // extHead: 색 추적 등으로 직접 찾은 칫솔 머리 위치(있으면 손 추정보다 우선)
+    // handOffset: 보정 시 기록한 손 좌표계 오프셋(색 추적 실패 시 손에서 복원)
+    function update(face, hands, t, extHead, handOffset) {
       if (!face) { reset(); return { status: 'noface', zone: null, brushing: false }; }
       const m = mouthInfo(face);
-      if (!hands || !hands.length) {
+      let best = null, source = null;
+      if (extHead) {
+        best = { head: extHead, grip: extHead, d: dist(extHead, m.center) / m.faceW }; source = 'color';
+      } else if (hands && hands.length) {
+        for (const h of hands) {
+          const e = handOffset ? applyOffset(h, handOffset) : estimateBrushHead(h, m.faceW, opts);
+          const d = dist(e.head, m.center) / m.faceW;
+          if (!best || d < best.d) best = { ...e, d };
+        }
+        source = handOffset ? 'hand-calibrated' : 'hand';
+      }
+      if (!best) {
         hist = [];
         return { status: 'nohand', zone: null, brushing: false, mouth: m };
-      }
-      let best = null;
-      for (const h of hands) {
-        const e = estimateBrushHead(h, m.faceW, opts);
-        const d = dist(e.head, m.center) / m.faceW;
-        if (!best || d < best.d) best = { ...e, d };
       }
       const last = hist.length ? hist[hist.length - 1] : null;
       const a = opts.gripSmooth;
@@ -121,12 +148,12 @@
       // 권장 모션: 앞니(A)는 위아래, 어금니(R/L)는 좌우
       const wanted = zone[1] === 'A' ? 'vertical' : 'horizontal';
       const goodStroke = brushing && sum.stroke === wanted;
-      return { status: near ? (brushing ? 'brushing' : 'idle') : 'far', zone: near ? zone : null, brushing, head: best.head, grip: best.grip,
+      return { status: near ? (brushing ? 'brushing' : 'idle') : 'far', zone: near ? zone : null, brushing, head: best.head, grip: best.grip, source,
         motion: sum.motion, stroke: sum.stroke, wanted, goodStroke, near, mouth: m, dx, dy };
     }
 
     return { update, reset, opts };
   }
 
-  return { createAnalyzer, mouthInfo, estimateBrushHead, classify, DEFAULTS, FACE, HAND };
+  return { createAnalyzer, mouthInfo, estimateBrushHead, handFrame, learnOffset, applyOffset, classify, DEFAULTS, FACE, HAND };
 });
