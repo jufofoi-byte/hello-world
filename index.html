@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>치아요정 덧니의 양치 대작전</title>
-<meta name="description" content="책 《우리 동네에 이런 치과가 있으면 좋겠다》의 치아요정 덧니와 함께 2분 동안 충치균을 닦아내는 어린이 양치 게임">
+<meta name="description" content="치아요정 덧니와 함께 2분 동안 충치균을 닦아내는 어린이 양치 게임. 치과의사 에세이 《우리 동네에 이런 치과가 있으면 좋겠다》와 함께합니다.">
 <meta name="theme-color" content="#e3f6ff">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -233,13 +233,13 @@
 
     <div class="fairy-wrap">
       <img class="fairy" id="start-fairy" src="assets/deotni/hero.webp" alt="치아요정 덧니">
-      <div class="bubble" id="start-bubble">안녕! 나는 《우리 동네에 이런 치과가 있으면 좋겠다》의 치아요정 <b>덧니</b>야.<br>이빨에 충치균이 잔뜩 붙었어… 같이 닦아 줄래?</div>
+      <div class="bubble" id="start-bubble">안녕! 나는 치아요정 <b>덧니</b>야.<br>이빨에 충치균이 잔뜩 붙었어… 같이 닦아 줄래?</div>
     </div>
 
     <div class="card book-card">
       <img src="assets/deotni/book.webp" alt="">
       <div>
-        <div class="book-sub">덧니는 이 책에 나오는 치아요정이에요</div>
+        <div class="book-sub">덧니를 만든 치과의사 선생님의 에세이</div>
         <div class="book-title">📖 《우리 동네에 이런 치과가 있으면 좋겠다》</div>
       </div>
     </div>
@@ -375,7 +375,7 @@
       <button class="btn ghost" id="btn-home">🏠 처음으로</button>
     </div>
     <p class="hint">진짜 양치도 하루 3번, 2분씩 꼼꼼하게! 🦷</p>
-    <p class="book-line">📖 덧니의 이야기는 책 <b>《우리 동네에 이런 치과가 있으면 좋겠다》</b>에서 만나요</p>
+    <p class="book-line">📖 덧니를 만든 치과의사 선생님의 에세이 <b>《우리 동네에 이런 치과가 있으면 좋겠다》</b>도 만나 보세요</p>
   </section>
 </div>
 
@@ -396,7 +396,7 @@
 
   const BOOK_TITLE = '《우리 동네에 이런 치과가 있으면 좋겠다》';
   const PRAISE = ['반짝반짝! 잘했어!', '와, 깨끗해졌다!', '충치균이 도망갔어!', '멋진 솜씨야!', '이 느낌 좋아~ 계속해!'];
-  const TIPS = ['어금니도 잊지 말고!', '위아래로 쓱싹쓱싹!', '구석구석 문질러 줘!', '안쪽 이빨도 닦아 줘!', '천천히, 꼼꼼하게!', `내 이야기는 ${BOOK_TITLE}에 있어!`];
+  const TIPS = ['어금니도 잊지 말고!', '위아래로 쓱싹쓱싹!', '구석구석 문질러 줘!', '안쪽 이빨도 닦아 줘!', '천천히, 꼼꼼하게!', `나를 만든 치과 선생님 책도 있대! ${BOOK_TITLE}`];
 
   // ---------- 상태 ----------
   const state = {
@@ -826,7 +826,7 @@
     const stars = pct >= 99 ? 3 : pct >= 70 ? 2 : pct >= 35 ? 1 : 0;
 
     const titles = ['덧니가 슬퍼… 다시 도전해 볼까?', '좋은 시작이야! 다음엔 더 꼼꼼히!', '잘했어! 거의 다 깨끗해졌어!', '완벽해! 충치균이 하나도 없어!'];
-    const bubbles = ['충치균이 아직 많이 남았어… 한 번 더!', '고마워! 조금 더 문질러 주면 반짝반짝할 거야.', '와! 덕분에 이빨이 거의 다 깨끗해졌어!', `최고야! 반짝반짝 빛나는 이빨이야! ✨ ${BOOK_TITLE}의 덧니가 자랑스러워!`];
+    const bubbles = ['충치균이 아직 많이 남았어… 한 번 더!', '고마워! 조금 더 문질러 주면 반짝반짝할 거야.', '와! 덕분에 이빨이 거의 다 깨끗해졌어!', `최고야! 반짝반짝 빛나는 이빨이야! ✨ ${BOOK_TITLE} 치과 선생님도 칭찬할 거야!`];
     $('#result-title').textContent = titles[stars];
     say(bubbles[stars], '#result-bubble');
     mood(['cry', 'ok', 'wink', 'party'][stars], '#result-fairy');
