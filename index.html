@@ -873,6 +873,7 @@
     guide: null, current: null, tiles: {}, small: null, sctx: null, lastBox: null,
   };
   let SMALL_W = 160, SMALL_H = 120;   // 움직임 감지용 축소 프레임 (영상 비율에 맞춰 조정)
+  const LIPS_SCALE_X = 1.3, LIPS_SCALE_Y = 1.5;   // 입술 윤곽을 이만큼 키운 영역 = 치아 위 칫솔을 보는 범위
 
   // 지금 닦아야 할 구역: 충치대장이 있으면 그 구역, 아니면 덧니가 안내하는 구역
   function activeZone() {
@@ -1022,10 +1023,11 @@
     }
 
     const mouth = BrushAnalyzer.mouthInfo(face);
+    const poly = BrushAnalyzer.lipsPolygon(face, LIPS_SCALE_X, LIPS_SCALE_Y);   // 치아 영역(입술 윤곽)
     cam.sctx.drawImage(v, 0, 0, SMALL_W, SMALL_H);
     const frame = cam.sctx.getImageData(0, 0, SMALL_W, SMALL_H).data;
-    const mo = cam.motion.update(frame, SMALL_W, SMALL_H, mouth, now);
-    cam.lastBox = { x: mo.box.x / SMALL_W, y: mo.box.y / SMALL_H, w: mo.box.w / SMALL_W, h: mo.box.h / SMALL_H };
+    const mo = cam.motion.update(frame, SMALL_W, SMALL_H, mouth, now, poly);
+    cam.lastBox = poly;
 
     const z = activeZone();
     const brushing = mo.moving && !!z;
@@ -1044,24 +1046,30 @@
     drawOverlay(mouth, cam.lastBox, brushing);
   }
 
-  // 입 영역(치아 전체)을 하나의 상자로 표시하고, 닦는 중이면 밝게 빛난다
-  function drawOverlay(mouth, box, brushing) {
+  // 치아 영역(입술 윤곽을 따라가는 모양)을 표시하고, 닦는 중이면 밝게 빛난다
+  function drawOverlay(mouth, poly, brushing) {
     const c = cam.canvas, v = cam.video, ctx = cam.ctx;
     if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight; }
     const W = c.width, H = c.height;
     ctx.clearRect(0, 0, W, H);
-    if (!mouth || !box) return;
-    const x = box.x * W, y = box.y * H, w = box.w * W, h = box.h * H;
+    if (!mouth || !poly || !poly.length) return;
     const bossZone = state.boss.active;
     ctx.fillStyle = brushing ? 'rgba(79,195,247,.28)' : bossZone ? 'rgba(156,106,222,.22)' : 'rgba(255,213,79,.14)';
     ctx.strokeStyle = brushing ? '#4fc3f7' : bossZone ? '#9c6ade' : '#ffd54f';
     ctx.lineWidth = brushing ? 6 : 4;
     ctx.setLineDash(brushing ? [] : [14, 10]);
-    roundRect(ctx, x, y, w, h, Math.min(w, h) * 0.2); ctx.fill(); ctx.stroke();
+    // 점들을 부드러운 닫힌 곡선으로 잇는다
+    const pts = poly.map((p) => ({ x: p.x * W, y: p.y * H }));
+    const n = pts.length;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % n];
+      const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
+      if (i === 0) ctx.moveTo(mx, my); else ctx.quadraticCurveTo(p0.x, p0.y, mx, my);
+    }
+    ctx.quadraticCurveTo(pts[0].x, pts[0].y, (pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.setLineDash([]);
-    // 입 가운데 표시
-    ctx.beginPath(); ctx.arc(mouth.center.x * W, mouth.center.y * H, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fill();
   }
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();

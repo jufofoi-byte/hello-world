@@ -32,6 +32,15 @@
   const dist = (a, b) => len(sub(a, b));
   const norm = (a) => { const l = len(a) || 1; return { x: a.x / l, y: a.y / l }; };
 
+  // MediaPipe 얼굴 메시의 바깥 입술 윤곽(시계 방향 20점)
+  const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185];
+
+  // 입술 윤곽을 입 중심 기준으로 scale배 키운 폴리곤 (정규화 좌표). 치아 위에서 움직이는 칫솔을 잡기 위한 영역.
+  function lipsPolygon(face, scaleX, scaleY) {
+    const c = mid(face[FACE.lipTop], face[FACE.lipBottom]);
+    return LIPS_OUTER.map((i) => ({ x: c.x + (face[i].x - c.x) * scaleX, y: c.y + (face[i].y - c.y) * scaleY }));
+  }
+
   function mouthInfo(face) {
     const center = mid(face[FACE.lipTop], face[FACE.lipBottom]);
     const width = dist(face[FACE.mouthL], face[FACE.mouthR]);
@@ -155,5 +164,5 @@
     return { update, reset, opts };
   }
 
-  return { createAnalyzer, mouthInfo, estimateBrushHead, handFrame, learnOffset, applyOffset, classify, DEFAULTS, FACE, HAND };
+  return { createAnalyzer, mouthInfo, lipsPolygon, estimateBrushHead, handFrame, learnOffset, applyOffset, classify, DEFAULTS, FACE, HAND, LIPS_OUTER };
 });
