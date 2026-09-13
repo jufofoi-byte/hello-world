@@ -363,8 +363,8 @@
   </section>
 </div>
 
-<script src="brush-analyzer.js"></script>
-<script src="mouth-motion.js"></script>
+<script src="brush-analyzer.js?v=5"></script>
+<script src="mouth-motion.js?v=5"></script>
 <script>
 (() => {
   'use strict';
@@ -869,7 +869,7 @@
 
   const cam = {
     stream: null, video: $('#cam-video'), canvas: $('#cam-overlay'), ctx: null,
-    face: null, motion: null, raf: 0, lastVideoTime: -1, ready: false,
+    face: null, motion: null, raf: 0, lastVideoTime: -1, ready: false, mp: null, fileset: null, cpuFallback: false,
     guide: null, current: null, tiles: {}, small: null, sctx: null, lastBox: null,
   };
   let SMALL_W = 160, SMALL_H = 120;   // 움직임 감지용 축소 프레임 (영상 비율에 맞춰 조정)
@@ -962,10 +962,9 @@
     try {
       if (!cam.face) {
         ltext.textContent = '덧니가 눈을 뜨는 중… (처음엔 조금 걸려요)';
-        const mp = await import('./vendor/mediapipe/vision_bundle.mjs');
-        const fileset = await mp.FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
-        const make = (delegate) => mp.FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './models/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 1 });
-        try { cam.face = await make('GPU'); } catch (e) { cam.face = await make('CPU'); }
+        cam.mp = await import('./vendor/mediapipe/vision_bundle.mjs');
+        cam.fileset = await cam.mp.FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
+        try { cam.face = await makeFace('GPU'); } catch (e) { cam.face = await makeFace('CPU'); cam.cpuFallback = true; }
       }
       cam.motion = MouthMotion.createDetector();
     } catch (err) {
@@ -989,6 +988,19 @@
     cam.raf = requestAnimationFrame(camLoop);
   }
 
+  function makeFace(delegate) {
+    return cam.mp.FaceLandmarker.createFromOptions(cam.fileset, { baseOptions: { modelAssetPath: './models/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 1 });
+  }
+  // GPU 인식기가 실제 인식 호출에서 실패하는 기기가 있어, 그때는 CPU 인식기로 바꿔 끼운다
+  async function rebuildFaceCpu() {
+    cam.cpuFallback = true;
+    const old = cam.face; cam.face = null;
+    camStatus('인식기를 다시 준비하는 중…');
+    try { if (old) old.close(); } catch (e) { /* ignore */ }
+    try { cam.face = await makeFace('CPU'); cam.lastVideoTime = -1; }
+    catch (e) { camStatus('얼굴 인식을 시작할 수 없어요: ' + (e && e.message ? e.message : e)); }
+  }
+
   function camStop() {
     cam.ready = false;
     cancelAnimationFrame(cam.raf);
@@ -1007,12 +1019,25 @@
     const dt = cam.lastVideoTime < 0 ? 0 : Math.min(0.1, v.currentTime - cam.lastVideoTime);
     cam.lastVideoTime = v.currentTime;
     const now = performance.now();
+    if (!cam.face) return;   // CPU 인식기로 바꾸는 중
     let face = null;
     try {
       const fr = cam.face.detectForVideo(v, now);
       face = fr.faceLandmarks && fr.faceLandmarks[0] ? fr.faceLandmarks[0] : null;
-    } catch (e) { return; }
+    } catch (e) {
+      if (!cam.cpuFallback) { rebuildFaceCpu(); return; }
+      camStatus('얼굴 인식 오류: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    try { camFrame(face, v, now, dt); }
+    catch (e) {
+      // 조용히 죽지 말고 화면에 보여 준다
+      camStatus('오류: ' + (e && e.message ? e.message : e));
+      cam.ready = false; cancelAnimationFrame(cam.raf);
+    }
+  }
 
+  function camFrame(face, v, now, dt) {
     if (!face) {
       cam.motion.reset();
       cam.lastBox = null;
