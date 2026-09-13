@@ -196,9 +196,6 @@
   .hud-light .bar { background: rgba(255,255,255,.35); }
   .cam-status { background: rgba(47,58,74,.82); color: #fff; font-weight: 800; font-size: .95rem; padding: 7px 14px; border-radius: 999px; white-space: nowrap; max-width: 96%; overflow: hidden; text-overflow: ellipsis; }
   .cam-status.brushing { background: rgba(79,195,247,.95); color: #123; }
-  .cam-swatch { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.9); border-radius: 999px; padding: 3px 10px 3px 3px; font-size: .72rem; font-weight: 800; color: #2f3a4a; align-self: flex-end; }
-  .cam-swatch i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); display: block; }
-  .cam-swatch[hidden] { display: none; }
   .zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%; max-width: 560px; }
   .zone { position: relative; background: rgba(255,255,255,.88); border-radius: 12px; padding: 5px 4px 7px; text-align: center; font-size: .68rem; font-weight: 800; color: #55637a; overflow: hidden; border: 3px solid transparent; transition: border-color .2s, transform .2s, background .2s; line-height: 1.2; }
   .zone .germ-row { font-size: .95rem; line-height: 1.15; min-height: 1.2em; letter-spacing: -2px; }
@@ -243,7 +240,7 @@
       <button class="btn" id="btn-start">🪥 손가락으로 닦기</button>
       <button class="btn secondary" id="btn-start-cam">📷 카메라로 진짜 닦기</button>
     </div>
-    <p class="privacy">카메라 모드는 얼굴과 칫솔 든 손을 인식해 6구역을 골고루 닦는지 봐줘요.<br>영상은 폰 안에서만 처리되고 어디에도 전송되지 않아요.</p>
+    <p class="privacy">카메라 모드는 얼굴을 인식해 입 주변에서 칫솔이 움직이는지 보고, 덧니가 6구역을 차례로 안내해요.<br>영상은 폰 안에서만 처리되고 어디에도 전송되지 않아요.</p>
 
     <div class="card stamps">
       <h2>🌟 나의 양치 도장판 <span id="stamp-total"></span></h2>
@@ -327,7 +324,6 @@
       <div class="topbar">
         <img class="fairy-mini" id="cam-fairy" src="assets/deotni/smile.png" alt="덧니">
         <div class="bubble" id="cam-bubble">카메라를 준비하고 있어요…</div>
-        <button class="icon-btn" id="btn-recalib" title="칫솔 다시 저장" aria-label="칫솔 다시 저장">🎨</button>
         <button class="icon-btn" id="btn-cam-quit" title="그만하기" aria-label="그만하기">✕</button>
       </div>
       <div class="hud hud-light">
@@ -338,7 +334,6 @@
     </div>
 
     <div class="cam-ui-bottom">
-      <div class="cam-swatch" id="cam-swatch" hidden><i></i>내 칫솔</div>
       <div class="cam-status" id="cam-status">얼굴을 찾는 중…</div>
       <div class="zones" id="zones"></div>
     </div>
@@ -369,7 +364,7 @@
 </div>
 
 <script src="brush-analyzer.js"></script>
-<script src="brush-tracker.js"></script>
+<script src="mouth-motion.js"></script>
 <script>
 (() => {
   'use strict';
@@ -783,7 +778,6 @@
     if (!state.running) return;
     const dt = Math.min(0.1, (ts - state.lastTs) / 1000);
     state.lastTs = ts;
-    if (state.mode === 'cam' && cam.calib.state !== 'done') { requestAnimationFrame(loop); return; } // 칫솔 저장 중엔 시계 멈춤
     state.timeLeft -= dt;
     tickBoss(dt);
     if (state.mode === 'cam') tickGuide(dt);
@@ -845,7 +839,6 @@
   $('#btn-start-cam').addEventListener('click', () => startGame('cam'));
   $('#btn-again').addEventListener('click', () => startGame(state.mode));
   $('#btn-cam-quit').addEventListener('click', () => { camStop(); state.running = false; renderStamps(); show('start'); });
-  $('#btn-recalib').addEventListener('click', () => { if (cam.ready) startCalibration(); });
   $('#btn-home').addEventListener('click', () => { renderStamps(); show('start'); });
   $('#btn-sound').addEventListener('click', (e) => {
     audio.on = !audio.on;
@@ -856,12 +849,11 @@
   });
 
   // ======================================================================
-  // 카메라 모드: 얼굴·손을 인식해서 6구역(위/아래 × 오른쪽 어금니/앞니/왼쪽 어금니)을 판정
+  // 카메라 모드: 얼굴을 인식해 입 영역을 잡고, 그 안에서 칫솔이 움직이면 "닦는 중"으로 본다.
+  // 6구역은 덧니가 20초씩 차례로 안내하고, 닦는 동안 안내 중인 구역이 깨끗해진다.
   // ======================================================================
   const GUIDE_SECONDS = 20;           // 덧니가 한 구역을 안내하는 시간
-  const CAM_RATE = 8;                 // 닦는 중일 때 구역 안 이빨마다 초당 줄어드는 충치균(%)
-  const CAM_TARGET_BONUS = 1.3;       // 덧니가 안내한 구역을 닦을 때 보너스 배율
-  const CAM_STROKE_BONUS = 1.2;       // 권장 모션(앞니 위아래, 어금니 좌우)으로 닦을 때 보너스 배율
+  const CAM_RATE = 7.5;               // 닦는 중일 때 구역 안 이빨마다 초당 줄어드는 충치균(%) → 약 13초면 한 구역 완료
   // 타일은 거울처럼 배치: 화면 왼쪽 = 사용자의 왼쪽
   const ZONES = [
     { id: 'UL', label: '왼쪽 위 어금니', teeth: [6, 7] },
@@ -877,13 +869,16 @@
 
   const cam = {
     stream: null, video: $('#cam-video'), canvas: $('#cam-overlay'), ctx: null,
-    face: null, hand: null, analyzer: null, raf: 0, lastVideoTime: -1, ready: false,
-    guide: null, current: null, brushingSince: 0, lastResult: null, tiles: {},
-    small: null, sctx: null, calib: { state: 'none', until: 0, color: null, handOffset: null, tries: 0 }, lastHead: null,
+    face: null, motion: null, raf: 0, lastVideoTime: -1, ready: false,
+    guide: null, current: null, tiles: {}, small: null, sctx: null, lastBox: null,
   };
-  let SMALL_W = 160, SMALL_H = 120;             // 색 추적용 축소 프레임 크기 (영상 비율에 맞춰 조정)
-  const CALIB_SECONDS = 3;                        // 칫솔 저장 카운트다운
-  const CALIB_RING = { x: 0.5, y: 0.55, r: 0.07 }; // 저장용 동그라미 (원본 프레임 정규화 좌표, r은 너비 기준)
+  let SMALL_W = 160, SMALL_H = 120;   // 움직임 감지용 축소 프레임 (영상 비율에 맞춰 조정)
+
+  // 지금 닦아야 할 구역: 충치대장이 있으면 그 구역, 아니면 덧니가 안내하는 구역
+  function activeZone() {
+    if (state.boss.active) return zoneOfTooth(state.boss.tooth);
+    return cam.guide ? zoneById(cam.guide.order[cam.guide.idx]) : null;
+  }
 
   function buildZones() {
     const wrap = $('#zones');
@@ -910,7 +905,7 @@
       const germs = z.teeth.filter((i) => !state.teeth[i].clean).length;
       el.querySelector('.germ-row').textContent = clean ? '✨' : '🦠'.repeat(Math.min(4, germs));
       el.classList.toggle('clean', clean);
-      el.classList.toggle('target', z.id === target && !clean);
+      el.classList.toggle('target', z.id === target && !clean && !bossZone);
       el.classList.toggle('active', cam.current === z.id);
       el.classList.toggle('boss', bossZone === z.id);
       el.querySelector('.boss-badge').hidden = bossZone !== z.id;
@@ -921,7 +916,7 @@
     const g = cam.guide; if (!g) return;
     const cur = zoneById(g.order[g.idx]);
     const curClean = cur.teeth.every((i) => state.teeth[i].clean);
-    g.timer -= dt;
+    if (!state.boss.active) g.timer -= dt;   // 충치대장을 쫓는 동안은 안내 시간이 흐르지 않는다
     if (g.timer <= 0 || curClean) {
       // 다음 안내 구역: 순서대로 돌되, 이미 깨끗한 곳은 건너뛴다
       let next = -1;
@@ -947,7 +942,7 @@
   async function camStart() {
     const loading = $('#cam-loading'), ltext = $('#cam-loading-text');
     loading.hidden = false;
-    cam.ready = false; cam.current = null; cam.lastVideoTime = -1;
+    cam.ready = false; cam.current = null; cam.lastVideoTime = -1; cam.lastBox = null;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       ltext.textContent = '이 브라우저에서는 카메라를 쓸 수 없어요';
       say('앗, 여기서는 카메라를 못 켜… 손가락 모드로 해 볼까?'); mood('confused');
@@ -964,20 +959,14 @@
       return;
     }
     try {
-      if (!cam.face || !cam.hand) {
+      if (!cam.face) {
         ltext.textContent = '덧니가 눈을 뜨는 중… (처음엔 조금 걸려요)';
         const mp = await import('./vendor/mediapipe/vision_bundle.mjs');
         const fileset = await mp.FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
-        const make = async (delegate) => {
-          const face = await mp.FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './models/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 1 });
-          const hand = await mp.HandLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './models/hand_landmarker.task', delegate }, runningMode: 'VIDEO', numHands: 2 });
-          return { face, hand };
-        };
-        let r;
-        try { r = await make('GPU'); } catch (e) { r = await make('CPU'); }
-        cam.face = r.face; cam.hand = r.hand;
+        const make = (delegate) => mp.FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './models/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 1 });
+        try { cam.face = await make('GPU'); } catch (e) { cam.face = await make('CPU'); }
       }
-      cam.analyzer = BrushAnalyzer.createAnalyzer();
+      cam.motion = MouthMotion.createDetector();
     } catch (err) {
       ltext.textContent = '인식 준비에 실패했어요: ' + (err && err.message ? err.message : err);
       say('으앙, 눈이 잘 안 떠져… 잠시 후 다시 해 볼래?'); mood('cry');
@@ -992,9 +981,9 @@
     if (vw >= vh) { SMALL_W = 160; SMALL_H = Math.round(160 * vh / vw); } else { SMALL_H = 160; SMALL_W = Math.round(160 * vw / vh); }
     cam.small.width = SMALL_W; cam.small.height = SMALL_H;
     cam.ready = true;
-    cam.calib = { state: 'none', until: 0, color: null, handOffset: null, tries: 0 };
-    cam.lastHead = null;
-    startCalibration();
+    const first = zoneById(cam.guide.order[cam.guide.idx]);
+    say(`얼굴을 가운데에 두고, ${first.label}부터 닦아 보자!`); mood('wand');
+    camStatus('얼굴을 찾는 중…');
     beginTimer();
     cam.raf = requestAnimationFrame(camLoop);
   }
@@ -1005,7 +994,7 @@
     if (cam.stream) { cam.stream.getTracks().forEach((t) => t.stop()); cam.stream = null; }
     cam.video.srcObject = null;
     cam.current = null;
-    cam.lastHead = null;
+    cam.lastBox = null;
     if (cam.ctx) cam.ctx.clearRect(0, 0, cam.canvas.width, cam.canvas.height);
   }
 
@@ -1017,158 +1006,62 @@
     const dt = cam.lastVideoTime < 0 ? 0 : Math.min(0.1, v.currentTime - cam.lastVideoTime);
     cam.lastVideoTime = v.currentTime;
     const now = performance.now();
-    let face = null, hands = [];
+    let face = null;
     try {
       const fr = cam.face.detectForVideo(v, now);
       face = fr.faceLandmarks && fr.faceLandmarks[0] ? fr.faceLandmarks[0] : null;
-      const hr = cam.hand.detectForVideo(v, now);
-      hands = hr.landmarks || [];
     } catch (e) { return; }
-    // 축소 프레임 (색 추적·칫솔 저장에 사용)
-    cam.sctx.drawImage(v, 0, 0, SMALL_W, SMALL_H);
-    const frame = cam.sctx.getImageData(0, 0, SMALL_W, SMALL_H).data;
 
-    if (cam.calib.state === 'sampling') {
-      const left = Math.max(0, cam.calib.until - now);
-      cam.calib.frames = (cam.calib.frames || 0) + 1;
-      camStatus(`칫솔 머리를 동그라미 안에! ${Math.ceil(left / 1000)}`);
-      if (left <= 0 && cam.calib.frames >= 8) finishCalibration(frame, face, hands); // 느린 기기에서도 몇 프레임은 보고 저장
-      drawOverlay(null, face, true);
+    if (!face) {
+      cam.motion.reset();
+      cam.lastBox = null;
+      camStatus('얼굴이 잘 안 보여요. 화면 가운데로!');
+      if (cam.current) { cam.current = null; renderZones(); }
+      drawOverlay(null, null, false);
       return;
     }
 
-    // 저장된 칫솔 색으로 입 주변에서 칫솔 머리 찾기
-    let extHead = null;
-    if (face && cam.calib.color) {
-      const m = BrushAnalyzer.mouthInfo(face);
-      const win = { x0: (m.center.x - m.faceW * 0.95) * SMALL_W, x1: (m.center.x + m.faceW * 0.95) * SMALL_W, y0: (m.center.y - m.faceH * 0.55) * SMALL_H, y1: (m.center.y + m.faceH * 0.55) * SMALL_H };
-      const prev = cam.lastHead ? { x: cam.lastHead.x * SMALL_W, y: cam.lastHead.y * SMALL_H, r: m.faceW * SMALL_W * BrushTracker.DEFAULTS.nearRadius } : null;
-      const blob = BrushTracker.findBlob(frame, SMALL_W, SMALL_H, cam.calib.color, win, prev);
-      if (blob) extHead = { x: blob.x / SMALL_W, y: blob.y / SMALL_H };
-    }
-    cam.lastHead = extHead;
+    const mouth = BrushAnalyzer.mouthInfo(face);
+    cam.sctx.drawImage(v, 0, 0, SMALL_W, SMALL_H);
+    const frame = cam.sctx.getImageData(0, 0, SMALL_W, SMALL_H).data;
+    const mo = cam.motion.update(frame, SMALL_W, SMALL_H, mouth, now);
+    cam.lastBox = { x: mo.box.x / SMALL_W, y: mo.box.y / SMALL_H, w: mo.box.w / SMALL_W, h: mo.box.h / SMALL_H };
 
-    const r = cam.analyzer.update(face, hands, now / 1000, extHead, cam.calib.handOffset);
-    cam.lastResult = r;
-    let statusText = '', brushing = false;
-    if (r.status === 'noface') statusText = '얼굴이 잘 안 보여요. 화면 가운데로!';
-    else if (r.status === 'nohand') statusText = '칫솔이 안 보여요. 칫솔 머리를 보여 줘요';
-    else if (r.status === 'far') statusText = '칫솔을 입 쪽으로!';
-    else if (r.status === 'idle') statusText = `${zoneById(r.zone).label} · 천천히 움직여 봐요`;
-    else {
-      brushing = true;
-      const label = zoneById(r.zone).label;
-      if (r.goodStroke) statusText = `${label} 닦는 중! 👍`;
-      else if (r.stroke && r.stroke !== 'mixed') statusText = `${label} · ${r.wanted === 'vertical' ? '앞니는 위아래로!' : '어금니는 옆으로!'}`;
-      else statusText = `${label} 닦는 중!`;
-    }
-    camStatus(statusText, brushing);
-
-    const newCurrent = r.zone || null;
+    const z = activeZone();
+    const brushing = mo.moving && !!z;
+    const newCurrent = brushing ? z.id : null;
     if (newCurrent !== cam.current) { cam.current = newCurrent; renderZones(); }
+    if (brushing) camStatus(`${z.label} 닦는 중! 👍`, true);
+    else camStatus(z ? `${z.label} · 칫솔을 움직여 봐요` : '칫솔을 움직여 봐요', false);
 
     if (brushing && dt > 0) {
-      const z = zoneById(r.zone);
-      const target = cam.guide && cam.guide.order[cam.guide.idx] === z.id;
-      const amount = CAM_RATE * dt * (target ? CAM_TARGET_BONUS : 1) * (r.goodStroke ? CAM_STROKE_BONUS : 1);
+      const amount = CAM_RATE * dt;
       for (const i of z.teeth) applyBrush(state.teeth[i], amount);
       if (Math.random() < 0.5) audio.scrub();
       updateHud();
       if (state.cleaned === state.teeth.length && !state.boss.active) { endGame(true); return; }
     }
-    drawOverlay(r, face);
+    drawOverlay(mouth, cam.lastBox, brushing);
   }
 
-  function startCalibration() {
-    cam.calib.state = 'sampling';
-    cam.calib.until = performance.now() + CALIB_SECONDS * 1000;
-    cam.calib.frames = 0;
-    cam.lastHead = null;
-    $('#cam-swatch').hidden = true;
-    say('칫솔 머리(색깔 있는 쪽)를 동그라미 안에 넣고 잠깐 기다려 줘!'); mood('wand');
-  }
-
-  function finishCalibration(frame, face, hands) {
-    const c = cam.calib;
-    const cx = CALIB_RING.x * SMALL_W, cy = CALIB_RING.y * SMALL_H, r = CALIB_RING.r * SMALL_W;
-    const color = BrushTracker.sampleColor(frame, SMALL_W, SMALL_H, cx, cy, r);
-    // 피부색과 너무 비슷하면(손을 넣었거나 칫솔이 살구색이면) 한 번 더 시도하게 한다
-    let skinLike = false;
-    if (face && color) {
-      for (const i of [BrushAnalyzer.FACE.cheekL, BrushAnalyzer.FACE.cheekR]) {
-        const p = face[i];
-        const skin = BrushTracker.sampleColor(frame, SMALL_W, SMALL_H, p.x * SMALL_W, p.y * SMALL_H, 3);
-        if (skin && BrushTracker.chromaDist(skin, color) < 12) skinLike = true;
-      }
-    }
-    if (!color || (skinLike && c.tries < 2)) {
-      c.tries++;
-      c.until = performance.now() + CALIB_SECONDS * 1000; c.frames = 0;
-      say(skinLike ? '피부색이랑 비슷해… 칫솔의 색깔 있는 부분을 보여 줘!' : '잘 안 보여… 한 번만 더!'); mood('confused');
-      return;
-    }
-    c.color = color; c.state = 'done'; c.tries = 0;
-    // 손이 보이면 "이 손 모양일 때 칫솔 머리는 여기" 를 기억해 색으로 못 찾을 때 쓴다
-    c.handOffset = null;
-    if (hands && hands.length) {
-      const ring = { x: CALIB_RING.x, y: CALIB_RING.y };
-      let best = null;
-      for (const h of hands) { const g = BrushAnalyzer.handFrame(h).grip; const d = Math.hypot(g.x - ring.x, g.y - ring.y); if (!best || d < best.d) best = { h, d }; }
-      if (best && best.d < 0.35) c.handOffset = BrushAnalyzer.learnOffset(best.h, ring);
-    }
-    const sw = $('#cam-swatch');
-    sw.querySelector('i').style.background = yccToCss(color);
-    sw.hidden = false;
-    cam.analyzer.reset();
-    say('칫솔 저장 완료! 얼굴을 가운데에 두고 닦아 보자!'); mood('cheer');
-    audio.ding();
-  }
-  function yccToCss(c) {
-    const r = c.y + 1.402 * (c.cr - 128), g = c.y - 0.344136 * (c.cb - 128) - 0.714136 * (c.cr - 128), b = c.y + 1.772 * (c.cb - 128);
-    const cl = (v) => Math.max(0, Math.min(255, Math.round(v)));
-    return `rgb(${cl(r)},${cl(g)},${cl(b)})`;
-  }
-
-  function drawOverlay(r, face, calibrating) {
+  // 입 영역(치아 전체)을 하나의 상자로 표시하고, 닦는 중이면 밝게 빛난다
+  function drawOverlay(mouth, box, brushing) {
     const c = cam.canvas, v = cam.video, ctx = cam.ctx;
     if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight; }
     const W = c.width, H = c.height;
     ctx.clearRect(0, 0, W, H);
-    if (calibrating) {
-      const rx = CALIB_RING.x * W, ry = CALIB_RING.y * H, rr = CALIB_RING.r * W;
-      ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2);
-      ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 6; ctx.setLineDash([12, 8]); ctx.stroke(); ctx.setLineDash([]);
-      ctx.beginPath(); ctx.arc(rx, ry, rr + 8, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2; ctx.stroke();
-      return;
-    }
-    if (!face || !r || !r.mouth) return;
-    const m = r.mouth;
-    const cx = m.center.x * W, cy = m.center.y * H;
-    const zw = m.faceW * W * 0.62, zh = m.faceH * H * 0.16;   // 6구역 격자 크기
-    const colW = zw / 3, rowH = zh / 2;
-    const bossZone = state.boss.active ? zoneOfTooth(state.boss.tooth).id : null;
-    // 원본 좌표에서 x가 작은 쪽이 사용자의 오른쪽
-    const cols = ['R', 'A', 'L'], rows = ['U', 'L'];
-    ctx.lineWidth = 2;
-    for (let ri = 0; ri < 2; ri++) for (let ci = 0; ci < 3; ci++) {
-      const id = rows[ri] + cols[ci];
-      const z = zoneById(id);
-      const pct = zonePct(z) / 100;
-      const x = cx - zw / 2 + ci * colW, y = cy - zh / 2 + ri * rowH;
-      const active = cam.current === id && r.brushing;
-      const target = cam.guide && cam.guide.order[cam.guide.idx] === id;
-      ctx.fillStyle = bossZone === id ? 'rgba(156,106,222,.45)' : `rgba(${Math.round(255 - 140 * pct)}, ${Math.round(200 + 55 * pct)}, ${Math.round(120 + 110 * pct)}, ${active ? .55 : .3})`;
-      ctx.strokeStyle = active ? '#4fc3f7' : target ? '#ffd54f' : 'rgba(255,255,255,.7)';
-      ctx.lineWidth = active || target ? 4 : 2;
-      roundRect(ctx, x + 2, y + 2, colW - 4, rowH - 4, 8); ctx.fill(); ctx.stroke();
-    }
-    // 칫솔 머리 추정 위치
-    if (r.head) {
-      ctx.beginPath(); ctx.arc(r.head.x * W, r.head.y * H, 12, 0, Math.PI * 2);
-      ctx.fillStyle = r.brushing ? 'rgba(79,195,247,.9)' : r.source === 'color' ? 'rgba(255,213,79,.9)' : 'rgba(255,255,255,.8)'; ctx.fill();
-      ctx.strokeStyle = '#2f3a4a'; ctx.lineWidth = 2; ctx.stroke();
-      if (r.grip) { ctx.beginPath(); ctx.moveTo(r.grip.x * W, r.grip.y * H); ctx.lineTo(r.head.x * W, r.head.y * H); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 4; ctx.stroke(); }
-    }
+    if (!mouth || !box) return;
+    const x = box.x * W, y = box.y * H, w = box.w * W, h = box.h * H;
+    const bossZone = state.boss.active;
+    ctx.fillStyle = brushing ? 'rgba(79,195,247,.28)' : bossZone ? 'rgba(156,106,222,.22)' : 'rgba(255,213,79,.14)';
+    ctx.strokeStyle = brushing ? '#4fc3f7' : bossZone ? '#9c6ade' : '#ffd54f';
+    ctx.lineWidth = brushing ? 6 : 4;
+    ctx.setLineDash(brushing ? [] : [14, 10]);
+    roundRect(ctx, x, y, w, h, Math.min(w, h) * 0.2); ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]);
+    // 입 가운데 표시
+    ctx.beginPath(); ctx.arc(mouth.center.x * W, mouth.center.y * H, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fill();
   }
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();

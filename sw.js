@@ -1,7 +1,7 @@
 // 덧니 양치 대작전 서비스 워커: 한 번 열어 두면 오프라인에서도 실행됩니다.
-const CACHE = 'deotni-v3';
+const CACHE = 'deotni-v4';
 const ASSETS = [
-  './', './index.html', './manifest.webmanifest', './brush-analyzer.js', './brush-tracker.js',
+  './', './index.html', './manifest.webmanifest', './brush-analyzer.js', './mouth-motion.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-512-maskable.png', './icons/apple-touch-icon.png', './icons/favicon-64.png',
   './assets/deotni/hero.webp', './assets/deotni/sleep.webp', './assets/deotni/wand.webp', './assets/deotni/book.webp',
   './assets/deotni/notepad.webp', './assets/deotni/laugh.webp', './assets/deotni/smile.png', './assets/deotni/party.png',
